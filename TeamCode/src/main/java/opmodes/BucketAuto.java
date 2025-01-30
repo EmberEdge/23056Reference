@@ -160,7 +160,7 @@ public class BucketAuto extends ActionOpMode {
                 .addPath(new BezierLine(
                         new Point(pickup1Pose),
                         new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(pickup1Pose.getHeading()), Math.toRadians(scorePose.getHeading()))
+                .setLinearHeadingInterpolation(Math.toRadians(pickup1Pose.getHeading()), Math.toRadians(scorePose.getHeading()),700)
                 //.setPathEndHeadingConstraint(10)
                 .addParametricCallback(0,() -> run(new SequentialAction(motorActions.intakeTransfer(),
                         new SleepAction(0.1),
@@ -172,7 +172,7 @@ public class BucketAuto extends ActionOpMode {
                 .addPath(new BezierLine(
                         new Point(pickup2Pose),
                         new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(pickup2Pose.getHeading()), Math.toRadians(scorePose.getHeading()))
+                .setLinearHeadingInterpolation(Math.toRadians(pickup2Pose.getHeading()), Math.toRadians(scorePose.getHeading()),700)
                 //.setPathEndHeadingConstraint(10)
                 .addParametricCallback(0,() -> run(new SequentialAction(motorActions.intakeTransfer(),
                         new SleepAction(0.1),
