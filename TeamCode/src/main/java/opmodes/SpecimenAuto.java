@@ -75,18 +75,20 @@ public class SpecimenAuto extends ActionOpMode {
     private MotorControl motorControl;
 
     // We'll consider the PathChain "done" at 99% param progress
-    private static final double PATH_COMPLETION_T = 0.982;
+    private static final double PATH_COMPLETION_T = 0.985;
 
     // -------------------------------------------------------------------------
     // Poses
     // -------------------------------------------------------------------------
     private final Pose startPose   = new Pose(9,  58, Math.toRadians(0));
-    private final Pose scorePose   = new Pose(34.5, 69, Math.toRadians(0));
-    private final Pose pickup1Pose = new Pose(28, 45, Math.toRadians(313));
-    private final Pose pickup1Control = new Pose(22, 76, Math.toRadians(313));
+    private final Pose preloadPose  = new Pose(32, 69, Math.toRadians(0));
+    private final Pose scorePose   = new Pose(32, 69, Math.toRadians(0));
+    private final Pose pickup1Pose = new Pose(28, 45, Math.toRadians(311));
+    private final Pose pickup1Control = new Pose(22, 76, Math.toRadians(311));
     private final Pose pickup2Pose = new Pose(25, 35, Math.toRadians(315));
     private final Pose pickup3Pose = new Pose(28, 30, Math.toRadians(305));
-    private final Pose depositPose = new Pose(25, 40, Math.toRadians(250));
+    private final Pose depositPose1 = new Pose(25, 44, Math.toRadians(250));
+    private final Pose depositPose2 = new Pose(25, 40, Math.toRadians(250));
 
     private final Pose intake = new Pose(11,35, Math.toRadians(0));
     private final Pose intakeControl1 = new Pose(32,35, Math.toRadians(0));
@@ -123,10 +125,10 @@ public class SpecimenAuto extends ActionOpMode {
 
         intake1 = follower.pathBuilder()
                 .addPath(new BezierCurve(
-                        new Point(depositPose),
+                        new Point(depositPose1),
                         new Point(intakeControl3),
                         new Point(intake)))
-                .setLinearHeadingInterpolation(Math.toRadians(depositPose.getHeading()), Math.toRadians(intake.getHeading()))
+                .setLinearHeadingInterpolation(Math.toRadians(depositPose1.getHeading()), Math.toRadians(intake.getHeading()))
                 .addParametricCallback(0.5, ()->motorControl.spin.setPower(0))
                 .addParametricCallback(0, ()-> motorActions.intakeSpecimen())
                 .build();
@@ -138,7 +140,7 @@ public class SpecimenAuto extends ActionOpMode {
                         new Point(intakeControl2),
                         new Point(scorePose)))
                 .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose.getHeading()))
-                .addTemporalCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
                 .build();
 
@@ -156,15 +158,15 @@ public class SpecimenAuto extends ActionOpMode {
         scorePreload = follower.pathBuilder()
                 .addPath(new BezierLine(
                         new Point(startPose),
-                        new Point(scorePose)
+                        new Point(preloadPose)
                 ))
-                .setLinearHeadingInterpolation(startPose.getHeading(), scorePose.getHeading())
-                .setZeroPowerAccelerationMultiplier(4)
-                .addParametricCallback(0.1, () -> run(
+                .setLinearHeadingInterpolation(startPose.getHeading(), preloadPose.getHeading())
+                .setZeroPowerAccelerationMultiplier(3.5)
+                .addParametricCallback(0, () -> run(
                         new SequentialAction(
                                 motorActions.intakePivot.Transfer(),
                                 motorActions.intakeArm.Intake(),
-                                motorActions.outtakeSpecimen()
+                                motorActions.outtakeSpecimenAuto()
                         )
                 ))
                 .build();
@@ -197,20 +199,20 @@ public class SpecimenAuto extends ActionOpMode {
 
         // Deposit #1, #2, #3
         depositHP1 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup1Pose), new Point(depositPose)))
-                .setLinearHeadingInterpolation(pickup1Pose.getHeading(), depositPose.getHeading())
+                .addPath(new BezierLine(new Point(pickup1Pose), new Point(depositPose1)))
+                .setLinearHeadingInterpolation(pickup1Pose.getHeading(), depositPose1.getHeading())
                 .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
                 .build();
 
         depositHP2 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup2Pose), new Point(depositPose)))
-                .setLinearHeadingInterpolation(pickup2Pose.getHeading(), depositPose.getHeading())
+                .addPath(new BezierLine(new Point(pickup2Pose), new Point(depositPose1)))
+                .setLinearHeadingInterpolation(pickup2Pose.getHeading(), depositPose1.getHeading())
                 .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
                 .build();
 
         depositHP3 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup3Pose), new Point(depositPose)))
-                .setLinearHeadingInterpolation(pickup3Pose.getHeading(), depositPose.getHeading())
+                .addPath(new BezierLine(new Point(pickup3Pose), new Point(depositPose2)))
+                .setLinearHeadingInterpolation(pickup3Pose.getHeading(), depositPose2.getHeading())
                 .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
                 .build();
 
@@ -264,7 +266,7 @@ public class SpecimenAuto extends ActionOpMode {
                 new ParallelAction(
                         motorActions.intakeArm.Grab(),
                         motorActions.spin.eat(),
-                        motorActions.extendo.setTargetPosition(500)
+                        motorActions.extendo.setTargetPosition(550)
 
                 )
         );
@@ -310,9 +312,6 @@ public class SpecimenAuto extends ActionOpMode {
                 motorActions.depositSpecimen()
         )); // score
 
-
-        // Optional final parking
-        // tasks.add(new PathChainTask(parkChain, 0.0));
     }
 
     // -------------------------------------------------------------------------
