@@ -3,7 +3,7 @@ package opmodes;
 import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.ParallelAction;
 import com.acmerobotics.roadrunner.SequentialAction;
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.acmerobotics.roadrunner.SleepAction;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.localization.Pose;
 import com.pedropathing.pathgen.BezierCurve;
@@ -12,100 +12,52 @@ import com.pedropathing.pathgen.PathChain;
 import com.pedropathing.pathgen.Point;
 import com.pedropathing.util.Constants;
 import com.pedropathing.util.Timer;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
+import helpers.data.Enums;
 import helpers.hardware.MotorControl;
-import helpers.hardware.actions.ActionOpMode;
 import helpers.hardware.actions.MotorActions;
+import helpers.hardware.actions.PathChainAutoOpMode;
 import pedroPathing.constants.FConstants;
 import pedroPathing.constants.LConstants;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * SpecimenAuto is an autonomous OpMode that uses a series of PathChainTasks.
+ * It extends PathChainAutoOpMode so that you only need to override buildPathChains() and buildTaskList(),
+ * plus the dummy path-follower methods.
+ */
 @Autonomous(name = "Specimen Auto")
-public class SpecimenAuto extends ActionOpMode {
+public class SpecimenAuto extends PathChainAutoOpMode {
 
-    // -------------------------------------------------------------------------
-    // For time-based triggers during WAIT
-    // -------------------------------------------------------------------------
-    private static class WaitAction {
-        double triggerTime; // seconds into the waiting phase
-        Action action;
-        boolean triggered;
-
-        WaitAction(double triggerTime, Action action) {
-            this.triggerTime = triggerTime;
-            this.action = action;
-            this.triggered = false;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // PathChainTask: holds a PathChain (with param callbacks) and a WAIT phase
-    // -------------------------------------------------------------------------
-    private static class PathChainTask {
-        PathChain pathChain;
-        double waitTime; // how long to wait after the chain
-        List<WaitAction> waitActions = new ArrayList<>();
-
-        PathChainTask(PathChain pathChain, double waitTime) {
-            this.pathChain = pathChain;
-            this.waitTime = waitTime;
-        }
-
-        // Add a "wait action," triggered at a certain second in the WAIT phase
-        PathChainTask addWaitAction(double triggerTime, Action action) {
-            waitActions.add(new WaitAction(triggerTime, action));
-            return this;
-        }
-
-        void resetWaitActions() {
-            for (WaitAction wa : waitActions) {
-                wa.triggered = false;
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Robot & Timing
-    // -------------------------------------------------------------------------
+    // -------- Hardware & Helper Fields --------
     private Follower follower;
-    private Timer pathTimer, opModeTimer;
     private MotorActions motorActions;
     private MotorControl motorControl;
+    private MotorControl.Limelight limelight;
+    private Timer opModeTimer;  // additional timer if desired
 
-    // We'll consider the PathChain "done" at 99% param progress
-    private static final double PATH_COMPLETION_T = 0.985;
-
-    // -------------------------------------------------------------------------
-    // Poses
-    // -------------------------------------------------------------------------
-    private final Pose startPose   = new Pose(9,  58, Math.toRadians(0));
-    private final Pose preloadPose  = new Pose(30, 69, Math.toRadians(0));
-    private final Pose scorePose   = new Pose(34.5, 69, Math.toRadians(0));
-    private final Pose scorePose1   = new Pose(32, 70, Math.toRadians(0));
-    private final Pose scorePose2   = new Pose(32, 71, Math.toRadians(0));
-    private final Pose scorePose3   = new Pose(32, 72, Math.toRadians(0));
-    private final Pose scorePose4   = new Pose(32, 73, Math.toRadians(0));
+    // -------- Poses --------
+    private final Pose startPose = new Pose(9, 58, Math.toRadians(0));
+    private final Pose preloadPose = new Pose(30, 69, Math.toRadians(0));
+    private final Pose scorePose = new Pose(34.5, 69, Math.toRadians(0));
+    private final Pose scorePose1 = new Pose(32, 70, Math.toRadians(0));
+    private final Pose scorePose2 = new Pose(32, 71, Math.toRadians(0));
+    private final Pose scorePose3 = new Pose(32, 72, Math.toRadians(0));
+    private final Pose scorePose4 = new Pose(32, 73, Math.toRadians(0));
     private final Pose pickup1Pose = new Pose(28, 45, Math.toRadians(311));
     private final Pose pickup1Control = new Pose(22, 76, Math.toRadians(311));
     private final Pose pickup2Pose = new Pose(25, 35, Math.toRadians(315));
     private final Pose pickup3Pose = new Pose(28, 30, Math.toRadians(305));
     private final Pose depositPose1 = new Pose(25, 44, Math.toRadians(250));
     private final Pose depositPose2 = new Pose(25, 40, Math.toRadians(250));
-
-    private final Pose intake = new Pose(11,35, Math.toRadians(0));
-    private final Pose intakeControl1 = new Pose(32,35, Math.toRadians(0));
-    private final Pose intakeControl2 = new Pose(5,74, Math.toRadians(0));
-
-    private final Pose intakeControl3 = new Pose(30,34, Math.toRadians(0));
-
-    private final Pose parkPose        = new Pose(11, 22, Math.toRadians(90));
+    private final Pose intake = new Pose(11, 35, Math.toRadians(0));
+    private final Pose intakeControl1 = new Pose(32, 35, Math.toRadians(0));
+    private final Pose intakeControl2 = new Pose(5, 74, Math.toRadians(0));
+    private final Pose intakeControl3 = new Pose(30, 34, Math.toRadians(0));
+    private final Pose parkPose = new Pose(11, 22, Math.toRadians(90));
     private final Pose parkControlPose = new Pose(12, 74, Math.toRadians(90));
 
-    // -------------------------------------------------------------------------
-    // PathChains
-    // -------------------------------------------------------------------------
+    // -------- PathChains --------
     private PathChain scorePreload;
     private PathChain grabPickup1, grabPickup2, grabPickup3;
     private PathChain depositHP1, depositHP2, depositHP3;
@@ -113,39 +65,34 @@ public class SpecimenAuto extends ActionOpMode {
     private PathChain score, score1, score2, score3, score4;
     private PathChain parkChain;
 
-    // -------------------------------------------------------------------------
-    // A List of PathChainTask
-    // -------------------------------------------------------------------------
-    private final List<PathChainTask> tasks = new ArrayList<>();
-    private int currentTaskIndex = 0;
-
-
-    private int taskPhase = 0;
-
-    // -------------------------------------------------------------------------
-    // Build PathChains (with param callbacks for driving)
-    // -------------------------------------------------------------------------
-    private void buildPathChains() {
-
+    // -------- Override buildPathChains() --------
+    @Override
+    protected void buildPathChains() {
+        // Intake path from deposit to intake.
         intake1 = follower.pathBuilder()
                 .addPath(new BezierCurve(
                         new Point(depositPose1),
                         new Point(intakeControl3),
                         new Point(intake)))
-                .setLinearHeadingInterpolation(Math.toRadians(depositPose1.getHeading()), Math.toRadians(intake.getHeading()))
-                .addParametricCallback(0.5, ()->motorControl.spin.setPower(0))
-                .addParametricCallback(0, ()-> motorActions.intakeSpecimen())
+                .setLinearHeadingInterpolation(Math.toRadians(depositPose1.getHeading()),
+                        Math.toRadians(intake.getHeading()))
+                .addParametricCallback(0.5, () -> motorControl.spin.setPower(0))
+                .addParametricCallback(0, () -> motorActions.intakeSpecimen())
                 .build();
 
+        // Score paths.
         score = follower.pathBuilder()
                 .addPath(new BezierCurve(
                         new Point(intake),
                         new Point(intakeControl1),
                         new Point(intakeControl2),
                         new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose.getHeading()))
-                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()),
+                        Math.toRadians(scorePose.getHeading()))
+                .addParametricCallback(0, () -> run(new ParallelAction(
+                        motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSpecimen()))
                 .build();
 
         score1 = follower.pathBuilder()
@@ -154,9 +101,12 @@ public class SpecimenAuto extends ActionOpMode {
                         new Point(intakeControl1),
                         new Point(intakeControl2),
                         new Point(scorePose1)))
-                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose1.getHeading()))
-                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()),
+                        Math.toRadians(scorePose1.getHeading()))
+                .addParametricCallback(0, () -> run(new ParallelAction(
+                        motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSpecimen()))
                 .build();
 
         score2 = follower.pathBuilder()
@@ -165,9 +115,12 @@ public class SpecimenAuto extends ActionOpMode {
                         new Point(intakeControl1),
                         new Point(intakeControl2),
                         new Point(scorePose2)))
-                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose2.getHeading()))
-                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()),
+                        Math.toRadians(scorePose2.getHeading()))
+                .addParametricCallback(0, () -> run(new ParallelAction(
+                        motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSpecimen()))
                 .build();
 
         score3 = follower.pathBuilder()
@@ -176,9 +129,12 @@ public class SpecimenAuto extends ActionOpMode {
                         new Point(intakeControl1),
                         new Point(intakeControl2),
                         new Point(scorePose3)))
-                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose2.getHeading()))
-                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()),
+                        Math.toRadians(scorePose3.getHeading()))
+                .addParametricCallback(0, () -> run(new ParallelAction(
+                        motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSpecimen()))
                 .build();
 
         score4 = follower.pathBuilder()
@@ -187,262 +143,221 @@ public class SpecimenAuto extends ActionOpMode {
                         new Point(intakeControl1),
                         new Point(intakeControl2),
                         new Point(scorePose4)))
-                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()), Math.toRadians(scorePose2.getHeading()))
-                .addParametricCallback(0, ()-> run(new ParallelAction( motorActions.intakePivot.Transfer(),
+                .setLinearHeadingInterpolation(Math.toRadians(intake.getHeading()),
+                        Math.toRadians(scorePose4.getHeading()))
+                .addParametricCallback(0, () -> run(new ParallelAction(
+                        motorActions.intakePivot.Transfer(),
                         motorActions.intakeArm.Intake())))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSpecimen()))
                 .build();
 
-
+        // Intake path from score to intake.
         intake2 = follower.pathBuilder()
                 .addPath(new BezierCurve(
                         new Point(scorePose),
                         new Point(intakeControl2),
                         new Point(intakeControl1),
                         new Point(intake)))
-                .setLinearHeadingInterpolation(Math.toRadians(scorePose.getHeading()), Math.toRadians(intake.getHeading()))
+                .setLinearHeadingInterpolation(Math.toRadians(scorePose.getHeading()),
+                        Math.toRadians(intake.getHeading()))
                 .addParametricCallback(0.05, () -> run(motorActions.intakeSpecimen()))
                 .build();
 
+        // Preload path.
         scorePreload = follower.pathBuilder()
                 .addPath(new BezierLine(
                         new Point(startPose),
-                        new Point(preloadPose)
-                ))
+                        new Point(preloadPose)))
                 .setLinearHeadingInterpolation(startPose.getHeading(), preloadPose.getHeading())
                 .setZeroPowerAccelerationMultiplier(2)
-                .addParametricCallback(0, () -> run(
-                        new SequentialAction(
-                                motorActions.intakePivot.Transfer(),
-                                motorActions.intakeArm.Intake(),
-                                motorActions.outtakeSpecimenAuto()
-                        )
-                ))
+                .addParametricCallback(0, () -> run(new SequentialAction(
+                        motorActions.intakePivot.Transfer(),
+                        motorActions.intakeArm.Intake(),
+                        motorActions.outtakeSpecimen())))
                 .build();
 
-        // Similarly build other chains
+        // Grab (pickup) paths.
         grabPickup1 = follower.pathBuilder()
                 .addPath(new BezierCurve(
                         new Point(scorePose),
                         new Point(pickup1Control),
-                        new Point(pickup1Pose)
-
-                ))
+                        new Point(pickup1Pose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), pickup1Pose.getHeading())
-                .addParametricCallback(0.4, () -> run(
-                        new SequentialAction(
-                                motorActions.spin.eat(),
-                                motorActions.intakeArm.Grab()
-                        )))
+                .addParametricCallback(0.4, () -> run(new SequentialAction(
+                        motorActions.spin.eat(),
+                        motorActions.intakeArm.Grab())))
                 .build();
 
         grabPickup2 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(scorePose), new Point(pickup2Pose)))
+                .addPath(new BezierLine(
+                        new Point(scorePose),
+                        new Point(pickup2Pose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), pickup2Pose.getHeading())
                 .build();
 
         grabPickup3 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(scorePose), new Point(pickup3Pose)))
+                .addPath(new BezierLine(
+                        new Point(scorePose),
+                        new Point(pickup3Pose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), pickup3Pose.getHeading())
                 .build();
 
-        // Deposit #1, #2, #3
+        // Deposit paths.
         depositHP1 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup1Pose), new Point(depositPose1)))
+                .addPath(new BezierLine(
+                        new Point(pickup1Pose),
+                        new Point(depositPose1)))
                 .setLinearHeadingInterpolation(pickup1Pose.getHeading(), depositPose1.getHeading())
-                .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
+                .addParametricCallback(0.8, () -> motorControl.spin.setPower(-1.0))
                 .build();
 
         depositHP2 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup2Pose), new Point(depositPose1)))
+                .addPath(new BezierLine(
+                        new Point(pickup2Pose),
+                        new Point(depositPose1)))
                 .setLinearHeadingInterpolation(pickup2Pose.getHeading(), depositPose1.getHeading())
-                .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
+                .addParametricCallback(0.8, () -> motorControl.spin.setPower(-1.0))
                 .build();
 
         depositHP3 = follower.pathBuilder()
-                .addPath(new BezierLine(new Point(pickup3Pose), new Point(depositPose2)))
+                .addPath(new BezierLine(
+                        new Point(pickup3Pose),
+                        new Point(depositPose2)))
                 .setLinearHeadingInterpolation(pickup3Pose.getHeading(), depositPose2.getHeading())
-                .addParametricCallback(0.8, ()->motorControl.spin.setPower(-1.0))
+                .addParametricCallback(0.8, () -> motorControl.spin.setPower(-1.0))
                 .build();
 
-        // Park
+        // Park path.
         parkChain = follower.pathBuilder()
                 .addPath(new BezierCurve(
                         new Point(scorePose4),
                         new Point(parkControlPose),
-                        new Point(parkPose)
-                ))
+                        new Point(parkPose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), parkPose.getHeading())
                 .setZeroPowerAccelerationMultiplier(6)
                 .build();
     }
 
-    // -------------------------------------------------------------------------
-    // Build the tasks (time-based triggers in WAIT, param-based in DRIVING)
-    // -------------------------------------------------------------------------
-    private void buildTaskList() {
+    // -------- Override buildTaskList() --------
+    @Override
+    protected void buildTaskList() {
         tasks.clear();
 
+        // Preload task.
         PathChainTask preloadTask = new PathChainTask(scorePreload, 1)
                 .addWaitAction(0.2, motorActions.depositSpecimen());
-
         tasks.add(preloadTask);
 
-        PathChainTask pickUpTask1 = new PathChainTask(grabPickup1, 0.4).addWaitAction(0,
-                motorActions.extendo.setTargetPosition(500)
-        ).addWaitAction(0.39, motorActions.extendo.setTargetPosition(450));
+        // Pickup task 1.
+        PathChainTask pickUpTask1 = new PathChainTask(grabPickup1, 0.4)
+                .addWaitAction(0, motorActions.extendo.setTargetPosition(500))
+                .addWaitAction(0.39, motorActions.extendo.setTargetPosition(450));
         tasks.add(pickUpTask1);
 
-        PathChainTask depositTask1 = new PathChainTask(depositHP1, 0.2).addWaitAction(0,
-                motorActions.extendo.setTargetPosition(0)
-        );
+        // Deposit task 1.
+        PathChainTask depositTask1 = new PathChainTask(depositHP1, 0.2)
+                .addWaitAction(0, motorActions.extendo.setTargetPosition(0));
         tasks.add(depositTask1);
 
-        PathChainTask pickUpTask2 = new PathChainTask(grabPickup2, 0.4).addWaitAction(0,
-                new ParallelAction(
+        // Pickup task 2.
+        PathChainTask pickUpTask2 = new PathChainTask(grabPickup2, 0.4)
+                .addWaitAction(0, new ParallelAction(
                         motorActions.intakeArm.Grab(),
                         motorActions.spin.eat(),
                         motorActions.extendo.setTargetPosition(500)
-
-                )
-        );
+                ));
         tasks.add(pickUpTask2);
-        PathChainTask depositTask2 = new PathChainTask(depositHP2, 0.2).addWaitAction(0,
-                motorActions.extendo.setTargetPosition(0)
-        );
+
+        // Deposit task 2.
+        PathChainTask depositTask2 = new PathChainTask(depositHP2, 0.2)
+                .addWaitAction(0, motorActions.extendo.setTargetPosition(0));
         tasks.add(depositTask2);
 
-        PathChainTask pickUpTask3 = new PathChainTask(grabPickup3, 0.4).addWaitAction(0,
-                new ParallelAction(
+        // Pickup task 3.
+        PathChainTask pickUpTask3 = new PathChainTask(grabPickup3, 0.4)
+                .addWaitAction(0, new ParallelAction(
                         motorActions.intakeArm.Grab(),
                         motorActions.spin.eat(),
                         motorActions.extendo.setTargetPosition(550)
-
-                )
-        );
+                ));
         tasks.add(pickUpTask3);
-        PathChainTask depositTask3 = new PathChainTask(depositHP3, 0.2).addWaitAction(0,
-                motorActions.extendo.setTargetPosition(0)
-        );
+
+        // Deposit task 3.
+        PathChainTask depositTask3 = new PathChainTask(depositHP3, 0.2)
+                .addWaitAction(0, motorActions.extendo.setTargetPosition(0));
         tasks.add(depositTask3);
 
+        // Intake task 1.
+        PathChainTask intakeTask1 = new PathChainTask(intake1, 0.2)
+                .addWaitAction(0.05, motorActions.outTakeClaw.Close());
+        tasks.add(intakeTask1);
 
-        PathChainTask intakeTask1 = new PathChainTask(intake1, 0.3).addWaitAction(0.05,
-                motorActions.outtakeSpecimen()
-        );
+        // Score task 1.
+        tasks.add(new PathChainTask(score1, 0.35)
+                .addWaitAction(0.01, motorActions.depositSpecimen()));
 
-        tasks.add(intakeTask1); // intake from human player
+        // Intake task 2.
+        tasks.add(new PathChainTask(intake2, 0.2)
+                .addWaitAction(0.01, motorActions.outTakeClaw.Close()));
 
-        tasks.add(new PathChainTask(score1, 0.35).addWaitAction(0.01,
-                motorActions.depositSpecimen()
-        )); // score 1
+        // Score task 2.
+        tasks.add(new PathChainTask(score2, 0.35)
+                .addWaitAction(0.01, motorActions.depositSpecimen()));
 
-        tasks.add(new PathChainTask(intake2, 0.35).addWaitAction(0.01,
-                motorActions.outtakeSpecimen()
-        ));// intake from human player
+        // Intake task 3.
+        tasks.add(new PathChainTask(intake2, 0.2)
+                .addWaitAction(0.01, motorActions.outTakeClaw.Close()));
 
-        tasks.add(new PathChainTask(score2, 0.35).addWaitAction(0.01,
-                motorActions.depositSpecimen()
-        )); // score 2
+        // Score task 3.
+        tasks.add(new PathChainTask(score3, 0.4)
+                .addWaitAction(0.01, motorActions.depositSpecimen()));
 
+        // Intake task 4.
+        tasks.add(new PathChainTask(intake2, 0.2)
+                .addWaitAction(0.05, motorActions.outTakeClaw.Close()));
 
-        tasks.add(new PathChainTask(intake2, 0.35).addWaitAction(0.01,
-                motorActions.outtakeSpecimen()
-        ));// intake from human player
+        // Score task 4.
+        tasks.add(new PathChainTask(score4, 0.2)
+                .addWaitAction(0.01, motorActions.depositSpecimen()));
 
-        tasks.add(new PathChainTask(score3, 0.4).addWaitAction(0.01,
-                motorActions.depositSpecimen()
-        )); // score 3
-
-        tasks.add(new PathChainTask(intake2, 0.4).addWaitAction(0.01,
-                motorActions.outtakeSpecimen()
-        ));// intake from human player
-
-        tasks.add(new PathChainTask(score4, 0.2).addWaitAction(0.01,
-                motorActions.depositSpecimen()
-        )); // score 4
-
-
+        // Park task.
         tasks.add(new PathChainTask(parkChain, 0.0));
     }
 
-    // -------------------------------------------------------------------------
-    // Main task-runner logic:
-    //   - DRIVING phase => param-based triggers from chain
-    //   - WAITING phase => time-based triggers from waitActions
-    // -------------------------------------------------------------------------
-    private void runTasks() {
-        if (currentTaskIndex >= tasks.size()) {
-            return; // all done
-        }
-
-        PathChainTask currentTask = tasks.get(currentTaskIndex);
-
-        switch (taskPhase) {
-            case 0: // == DRIVING ==
-                // If we aren't following yet, start
-                if (!follower.isBusy()) {
-                    follower.followPath(currentTask.pathChain, true);
-                    pathTimer.resetTimer();
-
-                    // We only "reset" the *wait* actions here.
-                    // Param-based callbacks are attached in the chain already.
-                    currentTask.resetWaitActions();
-                }
-
-                double tValue = follower.getCurrentTValue(); // param progress [0..1]
-                // NOTE: Param-based callbacks happen automatically in the `Follower`
-                // when tValue crosses the callback thresholds.
-
-                // Consider chain done at 99%
-                if (tValue >= PATH_COMPLETION_T) {
-                    // Move to WAIT
-                    pathTimer.resetTimer();
-                    taskPhase = 1;
-                }
-                break;
-
-            case 1: // == WAITING ==
-                double waitElapsed = pathTimer.getElapsedTimeSeconds();
-
-                // Trigger any "wait actions" whose time has arrived
-                for (WaitAction wa : currentTask.waitActions) {
-                    if (!wa.triggered && waitElapsed >= wa.triggerTime) {
-                        run(wa.action); // schedule this action
-                        wa.triggered = true;
-                    }
-                }
-
-                // Once we've fully waited out the entire waitTime, move on
-                if (waitElapsed >= currentTask.waitTime) {
-                    currentTaskIndex++;
-                    taskPhase = 0;
-                }
-                break;
-        }
+    // -------- Override dummy follower methods --------
+    @Override
+    protected boolean isPathActive() {
+        return follower.isBusy();
     }
 
-    // -------------------------------------------------------------------------
-    // Standard OpMode methods
-    // -------------------------------------------------------------------------
+    @Override
+    protected double getCurrentTValue() {
+        return follower.getCurrentTValue();
+    }
+
+    @Override
+    protected void startPath(PathChainTask task) {
+        // Cast the task's pathChain to PathChain and command the follower to follow it.
+        follower.followPath((PathChain) task.pathChain, true);
+    }
+
+    // -------- Standard OpMode Lifecycle Methods --------
     @Override
     public void init() {
-        pathTimer = new Timer();
         opModeTimer = new Timer();
         opModeTimer.resetTimer();
+        pathTimer.resetTimer();
 
         motorControl = new MotorControl(hardwareMap);
         motorActions = new MotorActions(motorControl);
-
         Constants.setConstants(FConstants.class, LConstants.class);
 
         follower = new Follower(hardwareMap);
         follower.setStartingPose(startPose);
-
         run(motorActions.outTakeClaw.Close());
 
-        // Build your chain geometry (with param callbacks)
+        // Build the paths and tasks.
         buildPathChains();
-        // Build the tasks (with wait-based triggers)
         buildTaskList();
     }
 
@@ -456,25 +371,13 @@ public class SpecimenAuto extends ActionOpMode {
         run(motorActions.intakeArm.Intake());
     }
 
-
     @Override
     public void loop() {
-        // 1) Let ActionOpMode handle running actions
-        //    (this calls updateAsync(...) under the hood)
         super.loop();
-
-        // 2) Update the follower
         follower.update();
-
-
-
-        // 4) runTasks => handle param-based transitions + time-based wait triggers
         runTasks();
-
-        // 5) (optional) Update hardware
         motorControl.update();
 
-        // Telemetry
         telemetry.addData("Task Index", currentTaskIndex + "/" + tasks.size());
         telemetry.addData("Phase", (taskPhase == 0) ? "DRIVE" : "WAIT");
         telemetry.addData("T Value", follower.getCurrentTValue());

@@ -140,29 +140,6 @@ public class MotorActions {
     }
 
 
-    public Action outtakeSampleAuto() {
-        return new SequentialAction(
-                t -> {
-                    outtakePosition = Enums.OutTake.Deposit;
-                    return false;
-                },
-                spin.stop(),
-
-                intakeArm.Transfer(),
-                new SleepAction(0.2),
-                outTakeClaw.Close(),
-                outtakePivot.TRANSFER2(),
-                new SleepAction(0.2),
-                intakeArm.Extended(),
-                outtakeArm.sample(),
-                outtakePivot.DepositSample(),
-                lift.setTargetPosition(775),
-                new SleepAction(0.2),
-                outtakeTurret.up(),
-                lift.waitUntilFinished()
-
-        );
-    }
 
     public Action intakeSpecimen(){
         return new SequentialAction(
@@ -188,7 +165,7 @@ public class MotorActions {
                 },
                 outTakeClaw.Close(),
                 intakeArm.Intake(),
-                new SleepAction(0.1),
+                new SleepAction(0.05),
                 outtakeTurret.down(),
                 intakeArm.Intake(),
                 outTakeLinkage.Specimen(),

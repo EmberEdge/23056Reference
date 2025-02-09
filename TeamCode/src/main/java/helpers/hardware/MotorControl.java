@@ -238,7 +238,7 @@ public class MotorControl {
          * @return boolean indicating whether the current position is close to the target.
          */
         public boolean closeEnough() {
-            return Math.abs(motor.getCurrentPosition() - targetPosition) < 20;
+            return Math.abs(motor.getCurrentPosition() - targetPosition) < 10;
         }
     }
 
