@@ -53,7 +53,7 @@ public class MotorActions {
                     return false;
                 },
                 outTakeClaw.Open(),
-                new SleepAction(0.1),
+                new SleepAction(0.2),
                 outTakeLinkage.Transfer(),
                 outtakeArm.Transfer(),
                 outtakePivot.Transfer(),
@@ -83,12 +83,12 @@ public class MotorActions {
                     intakePosition = Enums.Intake.Spin;
                     return false;
                 },
+                lift.setTargetPosition(30),
                 intakeArm.Grab(),
                 intakePivot.Grab(),
                 outtakeTransfer(),
                 spin.eatUntil(allianceColor, motorControl),
-                intakeTransfer(),
-                spin.slow()
+                intakeTransfer()
 
         );
     }
@@ -110,11 +110,37 @@ public class MotorActions {
                 intakePivot.Transfer(),
                 extendo.retracted(),
                 extendo.waitUntilFinished(),
-                outTakeClaw.Open()
+                outTakeClaw.Open(),
+                spin.slow()
         );
     }
 
     public Action outtakeSample() {
+        return new SequentialAction(
+                t -> {
+                    outtakePosition = Enums.OutTake.Deposit;
+                    return false;
+                },
+                spin.stop(),
+
+                intakeArm.Transfer(),
+                new SleepAction(0.25),
+                outTakeClaw.Close(),
+                outtakePivot.TRANSFER2(),
+                new SleepAction(0.2),
+                intakeArm.Extended(),
+                outTakeLinkage.sample(),
+                outtakeArm.sample(),
+                outtakePivot.DepositSample(),
+                lift.setTargetPosition(780),
+                new SleepAction(0.2),
+                outtakeTurret.up(),
+                lift.waitUntilFinished()
+        );
+    }
+
+
+    public Action outtakeSampleAuto() {
         return new SequentialAction(
                 t -> {
                     outtakePosition = Enums.OutTake.Deposit;
@@ -128,13 +154,13 @@ public class MotorActions {
                 outtakePivot.TRANSFER2(),
                 new SleepAction(0.2),
                 intakeArm.Extended(),
-                outTakeLinkage.sample(),
                 outtakeArm.sample(),
                 outtakePivot.DepositSample(),
-                lift.setTargetPosition(740),
+                lift.setTargetPosition(775),
                 new SleepAction(0.2),
                 outtakeTurret.up(),
                 lift.waitUntilFinished()
+
         );
     }
 
@@ -145,12 +171,11 @@ public class MotorActions {
                     return false;
                 },
                 lift.transfer(),
-                outtakeTurret.down(),
+                outtakeTurret.up(),
                 outTakeLinkage.wall(),
                 outtakeArm.wall(),
                 outtakePivot.wall(),
-                outTakeClaw.Open(),
-                lift.waitUntilFinished()
+                outTakeClaw.Open()
         );
     }
 
@@ -162,20 +187,39 @@ public class MotorActions {
                     return false;
                 },
                 outTakeClaw.Close(),
+                intakeArm.Intake(),
                 new SleepAction(0.1),
-                outtakeTurret.up(),
+                outtakeTurret.down(),
+                intakeArm.Intake(),
+                outTakeLinkage.Specimen(),
+                outtakeArm.Specimen(),
+                outtakePivot.Deposit(),
+                lift.secondTruss()
+        );
+    }
+
+    public Action outtakeSpecimenAuto() {
+        return new SequentialAction(
+                t -> {
+                    outtakePosition = Enums.OutTake.Specimen;
+                    return false;
+                },
+                outTakeClaw.Close(),
+                new SleepAction(0.1),
+                outtakeTurret.down(),
                 intakeArm.Intake(),
                 new SleepAction(0.1),
                 outTakeLinkage.Specimen(),
                 outtakeArm.Specimen(),
                 outtakePivot.Deposit(),
-                lift.secondTruss(),
+                lift.setTargetPosition(370),
                 lift.waitUntilFinished()
         );
     }
 
     public Action depositSpecimen(){
         return new SequentialAction(
+                outTakeClaw.Close(),
                 outTakeLinkage.Specimen(),
                 outtakePivot.Deposit2(),
                 lift.setTargetPosition(175),
@@ -254,7 +298,7 @@ public class MotorActions {
 
         //todo: fix positions
         public Action transfer() {
-            return setTargetPosition(0);
+            return setTargetPosition(30);
         }
         public Action secondBuceket() {
             return setTargetPosition(670);
@@ -263,7 +307,7 @@ public class MotorActions {
             return setTargetPosition(100);
         }
         public Action secondTruss() {
-            return setTargetPosition(420);
+            return setTargetPosition(460);
         }
     }
 
@@ -272,7 +316,7 @@ public class MotorActions {
         private static final double GRAB_POSITION = 0.05;
         private static final double INTAKE_POSITION = 0.2;
         private static final double EXTENDED_POSITION = 0.2;
-        private static final double TRANSFER_POSITION = 0.33;
+        private static final double TRANSFER_POSITION = 0.35;
 
         public Action setTargetPosition(double position) {
             return new Action() {
@@ -314,9 +358,9 @@ public class MotorActions {
 
     public class IntakePivot {
 
-        private static final double GRAB_POSITION = 0.68;
+        private static final double GRAB_POSITION = 0.66;
         private static final double EXTENDED_POSITION = 0.78;
-        private static final double TRANSFER_POSITION = 0.66;
+        private static final double TRANSFER_POSITION = 0.63;
 
         public Action setTargetPosition(double position) {
             return t -> {
@@ -346,7 +390,7 @@ public class MotorActions {
         private static final double TRANSFER_POSITION = 0.23;
         private static final double DEPOSIT = 0.4;
         private static final double DEPOSIT2 = 0.32;
-        private static final double DEPOSITSample = 0.65;
+        private static final double DEPOSITSample = 0.64;
         private static final double WALL_INTAKE = 0.51;
         private static final double TRANSFER = 0.21;
 
@@ -410,7 +454,7 @@ public class MotorActions {
         private static final double TRANSFER_POSITION = 0.64;
         private static final double SPECIMEN_DEPOSIT = 0.7;
         private static final double WALL_INTAKE = 0.5;
-        private static final double SAMPLE_DEPOSIT = 0.2;
+        private static final double SAMPLE_DEPOSIT = 0.1;
 
         public Action setTargetPosition(double position) {
             return t -> {
@@ -491,7 +535,7 @@ public class MotorActions {
 
     public class OutTakeClaw {
         private static final double CLOSE_POSITION = 0.02;
-        private static final double OPEN_POSITION = 0.35;
+        private static final double OPEN_POSITION = 0.36;
         private static final double PARTIAL_CLOSE = 0.1;
         private static final double PARTIAL_OPEN = 0.25;
 
@@ -532,11 +576,15 @@ public class MotorActions {
         public Action eatUntil(DetectedColor allianceColor, MotorControl motorControl) {
             final Enums.IntakeState[] currentState = {Enums.IntakeState.SEARCHING};
             final boolean[] started = {false};
+            // Add a variable to store when the rejecting state was entered
+            final long[] rejectingStartTime = {0};
+            // Define the delay in milliseconds (adjust as needed)
+            final long REJECT_DELAY_MS = 500;
 
             return telemetryPacket -> {
                 if (!started[0]) {
                     started[0] = true;
-                    motorControl.spin.setPower(0.8); // Start spinning forward
+                    motorControl.spin.setPower(1); // Start spinning forward
                 }
 
                 // Read the sensor
@@ -563,27 +611,37 @@ public class MotorActions {
                             motorControl.spin.setPower(0); // Stop motor
                             return false; // Action complete
                         }
+                        // If an unexpected (rejectable) color is seen, transition to REJECTING
                         if (color != Enums.DetectedColor.BLACK
                                 && color != Enums.DetectedColor.UNKNOWN
                                 && !correctColorSeen) {
                             currentState[0] = Enums.IntakeState.REJECTING;
+                            // Record the time when rejecting starts
+                            rejectingStartTime[0] = System.currentTimeMillis();
                             motorControl.spin.setPower(-1.0); // Spin backward
                         }
-                        return true; // Keep searching
+                        return true; // Continue searching
 
                     case REJECTING:
-                        if (color == Enums.DetectedColor.BLACK || color == Enums.DetectedColor.UNKNOWN) {
-                            // Done rejecting
-                            motorControl.spin.setPower(0.8); // Resume forward spinning
-                            currentState[0] = Enums.IntakeState.SEARCHING; // Reset state
+                        long now = System.currentTimeMillis();
+                        // Only check for resuming forward spinning after the delay
+                        if (now - rejectingStartTime[0] >= REJECT_DELAY_MS) {
+                            if (color == Enums.DetectedColor.BLACK || color == Enums.DetectedColor.UNKNOWN) {
+                                // Done rejecting; resume forward spinning
+                                motorControl.spin.setPower(1);
+                                currentState[0] = Enums.IntakeState.SEARCHING;
+                                // Reset the timer (optional cleanup)
+                                rejectingStartTime[0] = 0;
+                            }
                         }
-                        return true; // Keep rejecting
+                        return true; // Continue in the REJECTING state until conditions are met
                 }
 
-                // Default case (shouldn't happen)
+                // Default (should not be reached)
                 return false;
             };
-        }
+
+    }
 
 
         /**
@@ -592,7 +650,7 @@ public class MotorActions {
          */
         public Action slow() {
             return telemetryPacket -> {
-                motorControl.spin.setPower(-0.3);
+                motorControl.spin.setPower(0.3);
                 return false;
             };
         }

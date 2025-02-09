@@ -58,6 +58,7 @@ public class MotorControl {
         colorSensor.enableLed(false);
         spin = hardwareMap.get(DcMotorEx.class, "spin");
         armLeft.servo.setDirection(Servo.Direction.REVERSE);
+        outtakePivot .setDirection(Servo.Direction.REVERSE);
     }
 
 
@@ -92,8 +93,6 @@ public class MotorControl {
             return DetectedColor.BLUE;
         } else if (red > 100 && green > 100 && blue < 100) {
             return DetectedColor.YELLOW;
-        } else if (red < 20 && green < 20 && blue < 20) {
-            return DetectedColor.BLACK;
         } else {
             return DetectedColor.UNKNOWN;
         }
@@ -304,18 +303,18 @@ public class MotorControl {
     }
 
 
-    public class Limelight {
+    public static class Limelight {
         private final Limelight3A limelight;
-        private final int maxSamples = 20;
-        private final List<Double> xSamples;
-        private final List<Double> ySamples;
+        private final int maxSamples = 1;
+        private final List<Double> horizontal;
+        private final List<Double> foward;
         private boolean isCollectingSamples;
         private final Telemetry telemetry;
 
         public Limelight(HardwareMap hardwareMap, Telemetry telemetry) {
             limelight = hardwareMap.get(Limelight3A.class, "limelight");
-            xSamples = new ArrayList<>();
-            ySamples = new ArrayList<>();
+            horizontal = new ArrayList<>();
+            foward = new ArrayList<>();
             isCollectingSamples = false;
             this.telemetry = telemetry;
 
@@ -328,8 +327,8 @@ public class MotorControl {
         }
 
         public void resetSamples() {
-            xSamples.clear();
-            ySamples.clear();
+            horizontal.clear();
+            foward.clear();
             isCollectingSamples = false;
         }
 
@@ -358,24 +357,24 @@ public class MotorControl {
             }
 
             if (result != null && result.getPythonOutput() != null && result.getPythonOutput().length >= 2) {
-                double groundDistance = result.getPythonOutput()[0]; // Ground distance (in inches)
+                double forwardDistance = result.getPythonOutput()[0]; // Ground distance (in inches)
                 double horizontalOffset = result.getPythonOutput()[1]; // Horizontal offset (in inches)
                 double check = result.getPythonOutput()[3];
 
                 if (check == 1) { // Validate the output
-                    xSamples.add(horizontalOffset);
-                    ySamples.add(groundDistance);
+                    horizontal.add(horizontalOffset);
+                    foward.add(forwardDistance);
 
                     // Maintain the size of the sample lists
-                    if (xSamples.size() > maxSamples) {
-                        xSamples.remove(0);
+                    if (horizontal.size() > maxSamples) {
+                        horizontal.remove(0);
                     }
-                    if (ySamples.size() > maxSamples) {
-                        ySamples.remove(0);
+                    if (foward.size() > maxSamples) {
+                        foward.remove(0);
                     }
 
                     // Check if enough samples have been collected
-                    boolean enoughSamples = xSamples.size() == maxSamples && ySamples.size() == maxSamples;
+                    boolean enoughSamples = horizontal.size() == maxSamples && foward.size() == maxSamples;
                     telemetry.addData("Enough Samples", enoughSamples);
                     return enoughSamples;
                 }
@@ -388,22 +387,22 @@ public class MotorControl {
          *
          * @return a Vector3d object containing the average x, y, and z in inches.
          */
-        public Vector2d getAveragePoseInInches() {
-            if (xSamples.isEmpty() || ySamples.isEmpty()) {
+        public Vector2d getAverage() {
+            if (horizontal.isEmpty() || foward.isEmpty()) {
                 telemetry.addData("Average Pose", "No samples collected.");
                 telemetry.update();
-                return new Vector2d(0, 0); // Handle the case with no samples
+                return new Vector2d(99.99, 99.99); // Handle the case with no samples
             }
 
             // Compute averages for X and Y
-            double avgX = xSamples.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-            double avgY = ySamples.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            double hor = horizontal.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            double ver = foward.stream().mapToDouble(Double::doubleValue).average().orElse(0);
 
-            telemetry.addData("Average X", avgX);
-            telemetry.addData("Average Y", avgY);
+            telemetry.addData("Average X", hor);
+            telemetry.addData("Average Y", ver);
             telemetry.update();
 
-            return new Vector2d(avgX, avgY);
+            return new Vector2d(hor, ver);
         }
     }
 

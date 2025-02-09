@@ -23,7 +23,7 @@ import pedroPathing.constants.LConstants;
  * @version 2.0, 12/30/2024
  */
 
-@TeleOp(name = "Example Robot-Centric Teleop", group = "Examples")
+@TeleOp(name = "Actions Teleop", group = "Examples")
 public class ExampleRobotCentricTeleop extends ActionOpMode {
     private Follower follower;
     private final Pose startPose = new Pose(0, 0, 0);
@@ -69,14 +69,14 @@ public class ExampleRobotCentricTeleop extends ActionOpMode {
     @Override
     public void loop() {
 
-        if (gamepad2.x && !gamepad2XPressed) {
+        if (gamepad1.x && !gamepad2XPressed) {
             if (allianceColor == DetectedColor.RED) {
                 allianceColor = DetectedColor.BLUE;
             } else {
                 allianceColor = DetectedColor.RED;
             }
             gamepad2XPressed = true;
-        } else if (!gamepad2.x) {
+        } else if (!gamepad1.x) {
             gamepad2XPressed = false;
         }
 
@@ -90,7 +90,8 @@ public class ExampleRobotCentricTeleop extends ActionOpMode {
         }
 
         if (gamepad1.left_bumper && !leftBumperPressed) {
-            if (motorActions.intakePosition == Enums.Intake.Extended && motorActions.outtakePosition == Enums.OutTake.Transfer) {
+            if (motorActions.intakePosition == Enums.Intake.Extended) {
+                run(motorActions.spin.eat());
                 run(motorActions.intakeGrabUntil(allianceColor));
             }
             leftBumperPressed = true;
@@ -108,7 +109,7 @@ public class ExampleRobotCentricTeleop extends ActionOpMode {
         }
 
         if (gamepad1.left_trigger > 0 && !leftTriggerPressed) {
-            if (motorActions.outtakePosition == Enums.OutTake.Deposit && motorActions.intakePosition == Enums.Intake.Transfer) {
+            if (motorActions.outtakePosition == Enums.OutTake.Deposit) {
                 run(motorActions.outtakeTransfer());
             }
             leftTriggerPressed = true;
@@ -136,11 +137,11 @@ public class ExampleRobotCentricTeleop extends ActionOpMode {
             dpadDownPressed = false;
         }
 
-        if (gamepad2.a) {
+        if (gamepad1.a) {
             run(motorActions.intakeSpecimen());
-        } else if (gamepad2.b) {
+        } else if (gamepad1.b) {
             run(motorActions.outtakeSpecimen());
-        } else if (gamepad2.y) {
+        } else if (gamepad1.y) {
             run(motorActions.depositSpecimen());
         }
 
@@ -151,6 +152,16 @@ public class ExampleRobotCentricTeleop extends ActionOpMode {
 
         if (motorActions.intakePosition != Enums.Intake.Extended){
             rotationFactor = 0.5;
+        }
+
+        if (gamepad1.dpad_left) {
+            run(motorActions.hang.up());
+        }
+        else if (gamepad1.dpad_right) {
+            run(motorActions.hang.down());
+        }
+        else {
+            run(motorActions.hang.stop());
         }
 
         follower.setTeleOpMovementVectors(-gamepad1.right_stick_y, -gamepad1.right_stick_x, -gamepad1.left_stick_x * rotationFactor, true);

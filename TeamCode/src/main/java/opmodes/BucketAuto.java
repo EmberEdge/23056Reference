@@ -4,6 +4,8 @@ import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.ParallelAction;
 import com.acmerobotics.roadrunner.SequentialAction;
 import com.acmerobotics.roadrunner.SleepAction;
+import com.acmerobotics.roadrunner.Vector2d;
+import com.pedropathing.pathgen.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.localization.Pose;
@@ -30,33 +32,69 @@ public class BucketAuto extends ActionOpMode {
     // For time-based triggers during WAIT
     // -------------------------------------------------------------------------
     private static class WaitAction {
-        double triggerTime; // seconds into the waiting phase
+        // Use boxed Double so it can be null if not used.
+        Double triggerTime; // in seconds; may be null
+        WaitCondition condition; // may be null
         Action action;
         boolean triggered;
 
+        // Constructor for time-only trigger:
         WaitAction(double triggerTime, Action action) {
             this.triggerTime = triggerTime;
             this.action = action;
+            this.condition = null;
             this.triggered = false;
+        }
+
+        // Constructor for condition-only trigger:
+        WaitAction(WaitCondition condition, Action action) {
+            this.triggerTime = null;
+            this.condition = condition;
+            this.action = action;
+            this.triggered = false;
+        }
+
+        // Constructor for both a time and condition:
+        WaitAction(double triggerTime, WaitCondition condition, Action action) {
+            this.triggerTime = triggerTime;
+            this.condition = condition;
+            this.action = action;
+            this.triggered = false;
+        }
+
+        // Determines if this wait action should trigger, based on elapsed time.
+        boolean shouldTrigger(double elapsedSeconds) {
+            boolean timeMet = (triggerTime != null && elapsedSeconds >= triggerTime);
+            boolean conditionMet = (condition != null && condition.isMet());
+            return timeMet || conditionMet;
         }
     }
 
-    // -------------------------------------------------------------------------
-    // PathChainTask: holds a PathChain (with param callbacks) and a WAIT phase
-    // -------------------------------------------------------------------------
+    @FunctionalInterface
+    public interface WaitCondition {
+        boolean isMet();
+    }
+
     private static class PathChainTask {
         PathChain pathChain;
-        double waitTime; // how long to wait after the chain
+        double waitTime; // maximum time to wait if condition is not met
         List<WaitAction> waitActions = new ArrayList<>();
+        WaitCondition waitCondition; // optional overall condition
 
         PathChainTask(PathChain pathChain, double waitTime) {
             this.pathChain = pathChain;
             this.waitTime = waitTime;
         }
 
-        // Add a "wait action," triggered at a certain second in the WAIT phase
+        // Add a "wait action," triggered at a certain second in the WAIT phase.
         PathChainTask addWaitAction(double triggerTime, Action action) {
             waitActions.add(new WaitAction(triggerTime, action));
+            return this;
+        }
+
+        // Set a wait condition for early exit (optional).
+        PathChainTask setWaitCondition(WaitCondition condition) {
+            this.waitCondition = condition;
             return this;
         }
 
@@ -75,20 +113,25 @@ public class BucketAuto extends ActionOpMode {
     private MotorActions motorActions;
     private MotorControl motorControl;
 
-    // We'll consider the PathChain "done" at 99% param progress
-    private static final double PATH_COMPLETION_T = 0.98;
+    // We'll consider the PathChain "done" at 99% param progress.
+    private static final double PATH_COMPLETION_T = 0.985;
+
+    private MotorControl.Limelight limelight;
 
     // -------------------------------------------------------------------------
     // Poses
     // -------------------------------------------------------------------------
-    private final Pose startPose   = new Pose(9,  111, Math.toRadians(270));
-    private final Pose scorePose   = new Pose(18, 126, Math.toRadians(315));
+    private final Pose startPose   = new Pose(9, 111, Math.toRadians(270));
+    private final Pose scorePose   = new Pose(16, 128, Math.toRadians(315));
     private final Pose pickup1Pose = new Pose(20, 123, Math.toRadians(0));
-    private final Pose pickup2Pose = new Pose(20, 131.5, Math.toRadians(0));
-    private final Pose pickup3Pose = new Pose(22, 129, Math.toRadians(36));
+    private final Pose pickup2Pose = new Pose(20, 130, Math.toRadians(0));
+    private final Pose pickup3Pose = new Pose(24, 129, Math.toRadians(30));
 
-    private final Pose parkPose        = new Pose(60, 98, Math.toRadians(90));
-    private final Pose parkControlPose = new Pose(60, 98, Math.toRadians(90));
+    private final Pose parkPose        = new Pose(62, 97, Math.toRadians(315));
+    private final Pose parkControlPose = new Pose(64.5, 116, Math.toRadians(270));
+
+    // This field temporarily stores our dynamic (vision-based) path.
+    private PathChain SubmersiblePose;
 
     // -------------------------------------------------------------------------
     // PathChains
@@ -103,8 +146,6 @@ public class BucketAuto extends ActionOpMode {
     // -------------------------------------------------------------------------
     private final List<PathChainTask> tasks = new ArrayList<>();
     private int currentTaskIndex = 0;
-
-
     private int taskPhase = 0;
 
     // -------------------------------------------------------------------------
@@ -113,198 +154,200 @@ public class BucketAuto extends ActionOpMode {
     private void buildPathChains() {
 
         intake1 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(scorePose),
-                        new Point(pickup1Pose)))
-                //.setPathEndHeadingConstraint(10)
-                .setLinearHeadingInterpolation(Math.toRadians(scorePose.getHeading()), Math.toRadians(pickup1Pose.getHeading()))
-                .addParametricCallback(0.6, () -> run(
-                        new SequentialAction(
-                                motorActions.spin.eat(),
-                                motorActions.intakeArm.Grab()
-                        )))
-                .addParametricCallback(0.9, () -> run(motorActions.extendo.setTargetPosition(450)))
-
+                .addPath(new BezierLine(new Point(scorePose), new Point(pickup1Pose)))
+                .setConstantHeadingInterpolation(pickup1Pose.getHeading())
+                .addParametricCallback(0.6, () -> run(new SequentialAction(
+                        motorActions.spin.eat(),
+                        motorActions.intakeArm.Grab()
+                )))
+                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(400)))
                 .build();
 
         intake2 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(scorePose),
-                        new Point(pickup2Pose)))
-                .setLinearHeadingInterpolation(Math.toRadians(scorePose.getHeading()), Math.toRadians(pickup2Pose.getHeading()))
-               // .setPathEndHeadingConstraint(10)
-                .addParametricCallback(0.6, () -> run(
-                        new SequentialAction(
-                                motorActions.spin.eat(),
-                                motorActions.intakeArm.Grab()
-                        )))
-                .addParametricCallback(0.9, () -> run(motorActions.extendo.setTargetPosition(450)))
+                .addPath(new BezierLine(new Point(scorePose), new Point(pickup2Pose)))
+                .setConstantHeadingInterpolation(pickup2Pose.getHeading())
+                .addParametricCallback(0.6, () -> run(new SequentialAction(
+                        motorActions.spin.eat(),
+                        motorActions.intakeArm.Grab()
+                )))
+                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(350)))
                 .build();
 
         intake3 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(scorePose),
-                        new Point(pickup3Pose)))
-                .setLinearHeadingInterpolation(Math.toRadians(scorePose.getHeading()), Math.toRadians(pickup3Pose.getHeading()))
-                //.setPathEndHeadingConstraint(10)
-                .addParametricCallback(0.6, () -> run(
-                        new SequentialAction(
-                                motorActions.spin.eat(),
-                                motorActions.intakeArm.Grab()
-                        )))
-                .addParametricCallback(0.9, () -> run(motorActions.extendo.setTargetPosition(450)))
-
+                .addPath(new BezierLine(new Point(scorePose), new Point(pickup3Pose)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), pickup3Pose.getHeading(), 50)
+                .addParametricCallback(0.6, () -> run(new SequentialAction(
+                        motorActions.spin.eat(),
+                        motorActions.intakeArm.Grab()
+                )))
+                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(400)))
                 .build();
 
         score1 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(pickup1Pose),
-                        new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(pickup1Pose.getHeading()), Math.toRadians(scorePose.getHeading()),700)
-                //.setPathEndHeadingConstraint(10)
-                .addParametricCallback(0,() -> run(new SequentialAction(motorActions.intakeTransfer(),
-                        new SleepAction(0.1),
-                        motorActions.outtakeSample()
-                        )))
+                .addPath(new BezierLine(new Point(pickup1Pose), new Point(scorePose)))
+                .setLinearHeadingInterpolation(pickup1Pose.getHeading(), scorePose.getHeading())
+                .addParametricCallback(0.2, () -> run(new SequentialAction(
+                        motorActions.outtakeSampleAuto()
+                )))
                 .build();
 
         score2 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(pickup2Pose),
-                        new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(pickup2Pose.getHeading()), Math.toRadians(scorePose.getHeading()),700)
-                //.setPathEndHeadingConstraint(10)
-                .addParametricCallback(0,() -> run(new SequentialAction(motorActions.intakeTransfer(),
-                        new SleepAction(0.1),
-                        motorActions.outtakeSample()
+                .addPath(new BezierLine(new Point(pickup2Pose), new Point(scorePose)))
+                .setLinearHeadingInterpolation(pickup2Pose.getHeading(), scorePose.getHeading())
+                .addParametricCallback(0.2, () -> run(new SequentialAction(
+                        motorActions.outtakeSampleAuto()
                 )))
                 .build();
 
         score3 = follower.pathBuilder()
-                .addPath(new BezierLine(
-                        new Point(pickup3Pose),
-                        new Point(scorePose)))
-                .setLinearHeadingInterpolation(Math.toRadians(pickup3Pose.getHeading()), Math.toRadians(scorePose.getHeading()))
-                //.setPathEndHeadingConstraint(10)
-                .addParametricCallback(0,() -> run(new SequentialAction(motorActions.intakeTransfer(),
-                        new SleepAction(0.1),
-                        motorActions.outtakeSample()
+                .addPath(new BezierLine(new Point(pickup3Pose), new Point(scorePose)))
+                .setLinearHeadingInterpolation(pickup3Pose.getHeading(), scorePose.getHeading())
+                .addParametricCallback(0.2, () -> run(new SequentialAction(
+                        motorActions.outtakeSampleAuto()
                 )))
                 .build();
 
-
         scorePreload = follower.pathBuilder()
-                .addPath(new BezierCurve(
-                        new Point(startPose),
-                        new Point(scorePose)
-                ))
-                .addParametricCallback(0, () -> run(new ParallelAction(motorActions.outtakeSample(),  motorActions.extendo.setTargetPosition(200))))
-                .setLinearHeadingInterpolation(startPose.getHeading(), scorePose.getHeading())
+                .addPath(new BezierCurve(new Point(startPose), new Point(scorePose)))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSampleAuto()))
+                .setLinearHeadingInterpolation(startPose.getHeading(), Math.toRadians(315))
                 .build();
 
-
-
-        // Park
+        // Preplanned park path.
         parkChain = follower.pathBuilder()
-                .addPath(new BezierCurve(
-                        new Point(scorePose),
-                        new Point(parkControlPose),
-                        new Point(parkPose)
-                ))
+                .addPath(new BezierCurve(new Point(scorePose), new Point(parkControlPose), new Point(parkPose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), parkPose.getHeading())
                 .build();
     }
 
     // -------------------------------------------------------------------------
-    // Build the tasks (time-based triggers in WAIT, param-based in DRIVING)
+    // Create a dynamic alignment path based on the current pose and limelight data.
+    // This method returns a new PathChain.
+    // -------------------------------------------------------------------------
+    private PathChain followDynamicAlignmentPath() {
+        Pose currentPose = follower.getPose();
+        Vector2d limelightAvg = limelight.getAverage();
+        double rawOffset = limelightAvg.x;  // Make sure this is valid!
+
+        // Set a threshold for valid offset; adjust as needed.
+        double threshold = 0.1;
+
+        // Fallback default offset (in inches) if limelight data is not valid.
+        double defaultOffset = 5.0;
+
+        if (Math.abs(rawOffset) < threshold) {
+            // No valid target detected: use the fallback offset.
+            telemetry.addData("Dynamic Align", "No valid limelight data, using fallback");
+            rawOffset = defaultOffset;  // or choose to use 0.0 if you prefer no adjustment.
+        }
+
+        double heading = currentPose.getHeading();
+        double offsetX = rawOffset * Math.cos(heading);
+        double offsetY = rawOffset * Math.sin(heading);
+
+        Pose targetPose = new Pose(
+                currentPose.getX() + offsetX,
+                currentPose.getY() + offsetY,
+                currentPose.getHeading()
+        );
+
+        telemetry.addData("Dynamic Align: Raw Offset", rawOffset);
+        telemetry.addData("Dynamic Align: Target Pose", targetPose);
+        telemetry.update();
+
+        return follower.pathBuilder()
+                .addPath(new BezierLine(new Point(currentPose), new Point(targetPose)))
+                .setConstantHeadingInterpolation(targetPose.getHeading())
+                .build();
+    }
+
+    // -------------------------------------------------------------------------
+    // Build the tasks (preplanned and dynamic tasks)
     // -------------------------------------------------------------------------
     private void buildTaskList() {
         tasks.clear();
 
-        PathChainTask preloadTask = new PathChainTask(scorePreload, 0.5).addWaitAction( 0.4,
-                motorActions.outtakeTransfer()
-        );
-
+        // Preload task.
+        PathChainTask preloadTask = new PathChainTask(scorePreload, 1.5)
+                .addWaitAction(0.5, new SequentialAction(
+                        motorActions.outTakeLinkage.sample(),
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer()
+                ));
         tasks.add(preloadTask);
 
-        PathChainTask pickup1Task = new PathChainTask(intake1, 1);
-
+        // Pickup and scoring tasks.
+        PathChainTask pickup1Task = new PathChainTask(intake1, 1.5)
+                .addWaitAction(1, motorActions.intakeTransfer());
         tasks.add(pickup1Task);
 
-        PathChainTask score1Task = new PathChainTask(score1, 0.4);
-
+        PathChainTask score1Task = new PathChainTask(score1, 1.3)
+                .addWaitAction(0.5, new SequentialAction(
+                        motorActions.outTakeLinkage.sample(),
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer()
+                ));
         tasks.add(score1Task);
-/*
-        PathChainTask pickup2Task = new PathChainTask(intake2, 1);
 
+        PathChainTask pickup2Task = new PathChainTask(intake2, 1.5)
+                .addWaitAction(1, motorActions.intakeTransfer());
         tasks.add(pickup2Task);
 
-        PathChainTask score2Task = new PathChainTask(score2, 2);
-
+        PathChainTask score2Task = new PathChainTask(score2, 1.3)
+                .addWaitAction(0.5, new SequentialAction(
+                        motorActions.outTakeLinkage.sample(),
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer()
+                ));
         tasks.add(score2Task);
 
-        PathChainTask pickup3Task = new PathChainTask(intake3, 0.4);
-
+        PathChainTask pickup3Task = new PathChainTask(intake3, 1.5)
+                .addWaitAction(1, motorActions.intakeTransfer());
         tasks.add(pickup3Task);
 
-        PathChainTask score3Task = new PathChainTask(score3, 2);
+        PathChainTask score3Task = new PathChainTask(score3, 1.3)
+                .addWaitAction(0.5, new SequentialAction(
+                        motorActions.outTakeLinkage.sample(),
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer()
+                ));
+        tasks.add(score3Task);
 
-        tasks.add(score3Task);*/
 
-
-
-        // Optional final parking
-        // tasks.add(new PathChainTask(parkChain, 0.0));
     }
 
     // -------------------------------------------------------------------------
-    // Main task-runner logic:
-    //   - DRIVING phase => param-based triggers from chain
-    //   - WAITING phase => time-based triggers from waitActions
+    // Main task-runner logic: DRIVING and WAITING phases.
     // -------------------------------------------------------------------------
     private void runTasks() {
         if (currentTaskIndex >= tasks.size()) {
-            return; // all done
+            return; // All tasks completed.
         }
 
         PathChainTask currentTask = tasks.get(currentTaskIndex);
 
         switch (taskPhase) {
-            case 0: // == DRIVING ==
-                // If we aren't following yet, start
+            case 0: // DRIVING phase.
                 if (!follower.isBusy()) {
                     follower.followPath(currentTask.pathChain, true);
                     pathTimer.resetTimer();
-
-                    // We only "reset" the *wait* actions here.
-                    // Param-based callbacks are attached in the chain already.
                     currentTask.resetWaitActions();
                 }
-
-                double tValue = follower.getCurrentTValue(); // param progress [0..1]
-                // NOTE: Param-based callbacks happen automatically in the `Follower`
-                // when tValue crosses the callback thresholds.
-
-                // Consider chain done at 99%
+                double tValue = follower.getCurrentTValue(); // Progress value in [0..1]
                 if (tValue >= PATH_COMPLETION_T) {
-                    // Move to WAIT
                     pathTimer.resetTimer();
                     taskPhase = 1;
                 }
                 break;
 
-            case 1: // == WAITING ==
+            case 1: // WAITING phase.
                 double waitElapsed = pathTimer.getElapsedTimeSeconds();
-
-                // Trigger any "wait actions" whose time has arrived
                 for (WaitAction wa : currentTask.waitActions) {
-                    if (!wa.triggered && waitElapsed >= wa.triggerTime) {
-                        run(wa.action); // schedule this action
+                    if (!wa.triggered && wa.shouldTrigger(waitElapsed)) {
+                        run(wa.action);
                         wa.triggered = true;
                     }
                 }
-
-                // Once we've fully waited out the entire waitTime, move on
                 if (waitElapsed >= currentTask.waitTime) {
                     currentTaskIndex++;
                     taskPhase = 0;
@@ -327,12 +370,15 @@ public class BucketAuto extends ActionOpMode {
 
         Constants.setConstants(FConstants.class, LConstants.class);
 
+        limelight = new MotorControl.Limelight(hardwareMap, telemetry);
+
         follower = new Follower(hardwareMap);
         follower.setStartingPose(startPose);
 
-        // Build your chain geometry (with param callbacks)
+        run(motorActions.outTakeClaw.Close());
+
+        // Build the path geometry and tasks.
         buildPathChains();
-        // Build the tasks (with wait-based triggers)
         buildTaskList();
     }
 
@@ -346,25 +392,13 @@ public class BucketAuto extends ActionOpMode {
         run(motorActions.intakeArm.Intake());
     }
 
-
     @Override
     public void loop() {
-        // 1) Let ActionOpMode handle running actions
-        //    (this calls updateAsync(...) under the hood)
         super.loop();
-
-        // 2) Update the follower
         follower.update();
-
-
-
-        // 4) runTasks => handle param-based transitions + time-based wait triggers
         runTasks();
-
-        // 5) (optional) Update hardware
         motorControl.update();
 
-        // Telemetry
         telemetry.addData("Task Index", currentTaskIndex + "/" + tasks.size());
         telemetry.addData("Phase", (taskPhase == 0) ? "DRIVE" : "WAIT");
         telemetry.addData("T Value", follower.getCurrentTValue());
@@ -372,4 +406,5 @@ public class BucketAuto extends ActionOpMode {
         telemetry.addData("Running Actions", runningActions.size());
         telemetry.update();
     }
+
 }
