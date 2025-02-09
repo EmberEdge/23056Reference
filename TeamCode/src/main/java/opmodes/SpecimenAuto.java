@@ -338,7 +338,7 @@ public class SpecimenAuto extends PathChainAutoOpMode {
     @Override
     protected void startPath(PathChainTask task) {
         // Cast the task's pathChain to PathChain and command the follower to follow it.
-        follower.followPath((PathChain) task.pathChain, true);
+        follower.followPath((PathChain) task.pathChain, false);
     }
 
     // -------- Standard OpMode Lifecycle Methods --------
