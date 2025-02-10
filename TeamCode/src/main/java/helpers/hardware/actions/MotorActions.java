@@ -88,7 +88,8 @@ public class MotorActions {
                 intakePivot.Grab(),
                 outtakeTransfer(),
                 spin.eatUntil(allianceColor, motorControl),
-                intakeTransfer()
+                intakeTransfer(),
+                spin.slow()
 
         );
     }
@@ -139,6 +140,29 @@ public class MotorActions {
         );
     }
 
+    public Action outtakeSampleAuto() {
+        return new SequentialAction(
+                t -> {
+                    outtakePosition = Enums.OutTake.Deposit;
+                    return false;
+                },
+
+                intakeArm.Transfer(),
+                new SleepAction(0.25),
+                outTakeClaw.Close(),
+                outtakePivot.TRANSFER2(),
+                new SleepAction(0.2),
+                intakeArm.Extended(),
+                outtakeArm.sample(),
+                outtakePivot.DepositSample(),
+                spin.stop(),
+                lift.setTargetPosition(780),
+                new SleepAction(0.2),
+                outtakeTurret.up(),
+                lift.waitUntilFinished()
+        );
+    }
+
 
 
     public Action intakeSpecimen(){
@@ -163,6 +187,7 @@ public class MotorActions {
                     outtakePosition = Enums.OutTake.Specimen;
                     return false;
                 },
+                spin.stop(),
                 outTakeClaw.Close(),
                 intakeArm.Intake(),
                 new SleepAction(0.05),
@@ -185,7 +210,6 @@ public class MotorActions {
                 new SleepAction(0.1),
                 outtakeTurret.down(),
                 intakeArm.Intake(),
-                new SleepAction(0.1),
                 outTakeLinkage.Specimen(),
                 outtakeArm.Specimen(),
                 outtakePivot.Deposit(),
@@ -196,10 +220,11 @@ public class MotorActions {
 
     public Action depositSpecimen(){
         return new SequentialAction(
+                outtakeTurret.down(),
                 outTakeClaw.Close(),
                 outTakeLinkage.Specimen(),
                 outtakePivot.Deposit2(),
-                lift.setTargetPosition(175),
+                lift.setTargetPosition(150),
                 new SleepAction(0.1),
                 lift.waitUntilFinished(),
                 outTakeClaw.Open(),
@@ -235,6 +260,15 @@ public class MotorActions {
             };
         }
 
+            public Action waitUntilFinished(double position) {
+                return new Action() {
+                    @Override
+                    public boolean run(@NonNull TelemetryPacket t) {
+                        return !motorControl.extendo.closeEnough(position);
+                    }
+                };
+            }
+
         public Action findZero() {
             return new SequentialAction(t -> {motorControl.extendo.findZero();return false;},
                     new ActionHelpers.WaitUntilAction(() -> !motorControl.extendo.isResetting()));
@@ -266,6 +300,15 @@ public class MotorActions {
             };
         }
 
+        public Action waitUntilFinished(double position) {
+            return new Action() {
+                @Override
+                public boolean run(@NonNull TelemetryPacket t) {
+                    return !motorControl.lift.closeEnough();
+                }
+            };
+        }
+
         public Action findZero() {
             return new SequentialAction(t -> {motorControl.lift.findZero();return false;},
                     new ActionHelpers.WaitUntilAction(() -> !motorControl.lift.isResetting()));
@@ -273,7 +316,6 @@ public class MotorActions {
 
 
 
-        //todo: fix positions
         public Action transfer() {
             return setTargetPosition(30);
         }
@@ -284,7 +326,7 @@ public class MotorActions {
             return setTargetPosition(100);
         }
         public Action secondTruss() {
-            return setTargetPosition(460);
+            return setTargetPosition(470);
         }
     }
 
@@ -429,7 +471,7 @@ public class MotorActions {
 
     public class OuttakeLinkage {
         private static final double TRANSFER_POSITION = 0.64;
-        private static final double SPECIMEN_DEPOSIT = 0.7;
+        private static final double SPECIMEN_DEPOSIT = 0.75;
         private static final double WALL_INTAKE = 0.5;
         private static final double SAMPLE_DEPOSIT = 0.1;
 
@@ -627,7 +669,7 @@ public class MotorActions {
          */
         public Action slow() {
             return telemetryPacket -> {
-                motorControl.spin.setPower(0.3);
+                motorControl.spin.setPower(0.4);
                 return false;
             };
         }

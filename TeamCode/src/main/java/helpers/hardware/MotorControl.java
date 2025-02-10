@@ -166,6 +166,11 @@ public class MotorControl {
             // You might want to check both motors if they need to be in sync
             return Math.abs(motor.getCurrentPosition() - targetPosition) < 20 ;
         }
+
+
+        public boolean closeEnough(double target) {
+            return Math.abs(motor.getCurrentPosition() - target) < 30;
+        }
     }
 
     public static class Lift extends ControlledDevice {
@@ -238,7 +243,17 @@ public class MotorControl {
          * @return boolean indicating whether the current position is close to the target.
          */
         public boolean closeEnough() {
-            return Math.abs(motor.getCurrentPosition() - targetPosition) < 10;
+            return Math.abs(motor.getCurrentPosition() - targetPosition) <30;
+        }
+
+
+        /**
+         * Checks if the motor is close enough to the target position.
+         *
+         * @return boolean indicating whether the current position is close to the target.
+         */
+        public boolean closeEnough(double target) {
+            return Math.abs(motor.getCurrentPosition() - target) < 30;
         }
     }
 

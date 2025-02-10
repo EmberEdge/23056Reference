@@ -24,6 +24,9 @@ public abstract class PathChainAutoOpMode extends ActionOpMode {
 
     // ---------- Task Management Fields ----------
     protected Timer pathTimer = new Timer();
+    protected Timer waitTimer = new Timer();    // used for overall waiting
+    protected Timer actionTimer = new Timer();  // used for triggering wait actions
+
     protected List<PathChainTask> tasks = new ArrayList<>();
     protected int currentTaskIndex = 0;
     // taskPhase: 0 = DRIVING phase, 1 = WAITING phase.
@@ -68,54 +71,51 @@ public abstract class PathChainAutoOpMode extends ActionOpMode {
 
         switch (taskPhase) {
             case 0: // DRIVING phase.
-                // Subclasses should implement your path following logic.
-                // For example, check if the follower is active; if not, start the path.
                 if (!isPathActive()) {
                     startPath(currentTask);
-                    pathTimer.resetTimer();
+                    // Reset both timers when starting the WAITING phase later.
+                    waitTimer.resetTimer();
+                    actionTimer.resetTimer();
                     currentTask.resetWaitActions();
                 }
-                // Here, we check the progress of the path (e.g., using your follower's progress value).
                 double tValue = getCurrentTValue();
                 if (tValue >= PATH_COMPLETION_T) {
-                    pathTimer.resetTimer();
+                    // Transition to WAITING phase:
+                    waitTimer.resetTimer();
+                    actionTimer.resetTimer();
                     taskPhase = 1;
                 }
                 break;
 
             case 1: // WAITING phase.
-                double waitElapsed = pathTimer.getElapsedTimeSeconds();
+                double overallWaitElapsed = waitTimer.getElapsedTimeSeconds();
+                double actionElapsed = actionTimer.getElapsedTimeSeconds();
 
-                // Process individual wait actions.
+                // Process individual wait actions using the actionTimer.
                 for (WaitAction wa : currentTask.waitActions) {
-                    if (!wa.triggered && wa.shouldTrigger(waitElapsed)) {
+                    if (!wa.triggered && wa.shouldTrigger(actionElapsed)) {
                         run(wa.action);
                         wa.triggered = true;
                     }
                 }
 
-                // Process overall wait condition and timeout logic.
+                // Process overall wait condition and timeouts using the waitTimer.
                 if (currentTask.waitCondition != null) {
-                    // If the condition hasn't been met yet:
                     if (currentTask.conditionMetTime == null) {
                         if (currentTask.waitCondition.isMet()) {
-                            // Record when the condition was met.
-                            currentTask.conditionMetTime = waitElapsed;
-                        } else if (waitElapsed >= currentTask.maxWaitTime) {
-                            // Condition never met within the maximum wait time; move on.
+                            currentTask.conditionMetTime = overallWaitElapsed;
+                        } else if (overallWaitElapsed >= currentTask.maxWaitTime) {
                             currentTaskIndex++;
                             taskPhase = 0;
                         }
                     } else {
-                        // Condition has been met; wait for additional waitTime.
-                        if (waitElapsed - currentTask.conditionMetTime >= currentTask.waitTime) {
+                        if (overallWaitElapsed - currentTask.conditionMetTime >= currentTask.waitTime) {
                             currentTaskIndex++;
                             taskPhase = 0;
                         }
                     }
                 } else {
-                    // No overall wait condition provided; just use the waitTime.
-                    if (waitElapsed >= currentTask.waitTime) {
+                    if (overallWaitElapsed >= currentTask.waitTime) {
                         currentTaskIndex++;
                         taskPhase = 0;
                     }

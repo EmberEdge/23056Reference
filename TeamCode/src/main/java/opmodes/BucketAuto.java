@@ -39,10 +39,10 @@ public class BucketAuto extends PathChainAutoOpMode {
     // Poses used in the autonomous routine.
     // ---------------------------
     private final Pose startPose   = new Pose(9, 111, Math.toRadians(270));
-    private final Pose scorePose   = new Pose(16, 128, Math.toRadians(315));
-    private final Pose pickup1Pose = new Pose(20, 123, Math.toRadians(0));
+    private final Pose scorePose   = new Pose(17, 128, Math.toRadians(315));
+    private final Pose pickup1Pose = new Pose(20, 122, Math.toRadians(0));
     private final Pose pickup2Pose = new Pose(20, 130, Math.toRadians(0));
-    private final Pose pickup3Pose = new Pose(24, 129, Math.toRadians(30));
+    private final Pose pickup3Pose = new Pose(24, 128, Math.toRadians(20));
 
     private final Pose parkPose        = new Pose(62, 97, Math.toRadians(315));
     private final Pose parkControlPose = new Pose(64.5, 116, Math.toRadians(270));
@@ -65,51 +65,57 @@ public class BucketAuto extends PathChainAutoOpMode {
                 .addPath(new BezierLine(new Point(scorePose), new Point(pickup1Pose)))
                 .setConstantHeadingInterpolation(pickup1Pose.getHeading())
                 .addParametricCallback(0.6, () -> run(motorActions.intakeGrabUntil(Enums.DetectedColor.YELLOW)))
-                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(400)))
+                .addParametricCallback(1, () -> run(motorActions.extendo.setTargetPosition(200)))
                 .build();
 
         intake2 = follower.pathBuilder()
                 .addPath(new BezierLine(new Point(scorePose), new Point(pickup2Pose)))
                 .setConstantHeadingInterpolation(pickup2Pose.getHeading())
                 .addParametricCallback(0.6, () -> run(motorActions.intakeGrabUntil(Enums.DetectedColor.YELLOW)))
-                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(350)))
+                .addParametricCallback(1, () -> run(motorActions.extendo.setTargetPosition(350)))
                 .build();
 
         intake3 = follower.pathBuilder()
                 .addPath(new BezierLine(new Point(scorePose), new Point(pickup3Pose)))
                 .setLinearHeadingInterpolation(scorePose.getHeading(), pickup3Pose.getHeading(), 50)
                 .addParametricCallback(0.6, () -> run(motorActions.intakeGrabUntil(Enums.DetectedColor.YELLOW)))
-                .addParametricCallback(0.92, () -> run(motorActions.extendo.setTargetPosition(400)))
+                .addParametricCallback(1, () -> run(motorActions.extendo.setTargetPosition(400)))
                 .build();
 
         score1 = follower.pathBuilder()
                 .addPath(new BezierLine(new Point(pickup1Pose), new Point(scorePose)))
-                .setLinearHeadingInterpolation(pickup1Pose.getHeading(), scorePose.getHeading())
-                .addParametricCallback(0, () -> run(new SequentialAction(
-                        motorActions.outtakeSample()
+                .setLinearHeadingInterpolation(pickup1Pose.getHeading(), scorePose.getHeading(), 50)
+                .addParametricCallback(0, ()->run(motorActions.spin.slow()))
+                .addParametricCallback(0.3, () -> run(new SequentialAction(
+                        motorActions.lift.waitUntilFinished(0),
+                        motorActions.outtakeSampleAuto()
                 )))
                 .build();
 
         score2 = follower.pathBuilder()
                 .addPath(new BezierLine(new Point(pickup2Pose), new Point(scorePose)))
-                .setLinearHeadingInterpolation(pickup2Pose.getHeading(), scorePose.getHeading())
-                .addParametricCallback(0, () -> run(new SequentialAction(
-                        motorActions.outtakeSample()
+                .setLinearHeadingInterpolation(pickup2Pose.getHeading(), scorePose.getHeading(), 50)
+                .addParametricCallback(0, ()->run(motorActions.spin.slow()))
+                .addParametricCallback(0.3, () -> run(new SequentialAction(
+                        motorActions.lift.waitUntilFinished(0),
+                        motorActions.outtakeSampleAuto()
                 )))
                 .build();
 
         score3 = follower.pathBuilder()
                 .addPath(new BezierLine(new Point(pickup3Pose), new Point(scorePose)))
-                .setLinearHeadingInterpolation(pickup3Pose.getHeading(), scorePose.getHeading())
-                .addParametricCallback(0, () -> run(new SequentialAction(
-                        motorActions.outtakeSample()
+                .setLinearHeadingInterpolation(pickup3Pose.getHeading(), scorePose.getHeading(), 50)
+                .addParametricCallback(0, ()->run(motorActions.spin.slow()))
+                .addParametricCallback(0.3, () -> run(new SequentialAction(
+                        motorActions.lift.waitUntilFinished(0),
+                        motorActions.outtakeSampleAuto()
                 )))
                 .build();
 
         scorePreload = follower.pathBuilder()
                 .addPath(new BezierCurve(new Point(startPose), new Point(scorePose)))
-                .addParametricCallback(0, () -> run(motorActions.outtakeSample()))
-                .setLinearHeadingInterpolation(startPose.getHeading(), Math.toRadians(315))
+                .addParametricCallback(0, () -> run(motorActions.outtakeSampleAuto()))
+                .setLinearHeadingInterpolation(startPose.getHeading(), scorePose.getHeading())
                 .build();
 
         parkChain = follower.pathBuilder()
@@ -126,68 +132,73 @@ public class BucketAuto extends PathChainAutoOpMode {
         tasks.clear();
 
         // Preload task.
-        PathChainTask preloadTask = new PathChainTask(scorePreload, 0.3)
-                .addWaitAction(0, new SequentialAction(
-                        motorActions.lift.waitUntilFinished(),
+        PathChainTask preloadTask = new PathChainTask(scorePreload, 0.8)
+                .addWaitAction(() -> motorControl.lift.closeEnough(770), new SequentialAction(
                         motorActions.outTakeLinkage.sample(),
-                        new SleepAction(0.2),
-                        motorActions.outtakeTransfer()
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer(),
+                        motorActions.intakePivot.Grab(),
+                        motorActions.intakeArm.Grab()
                 ))
                 .setMaxWaitTime(2)
-                .setWaitCondition(motorControl.lift::closeEnough);
+                .setWaitCondition(() -> motorControl.lift.closeEnough(770));
         tasks.add(preloadTask);
 
         // Pickup and scoring tasks.
         PathChainTask pickup1Task = new PathChainTask(intake1, 0.5)
-                .setMaxWaitTime(2)
-                .addWaitAction(1.5, motorActions.intakeTransfer())
+                .setMaxWaitTime(1.25)
+                .addWaitAction(0.5, motorActions.extendo.setTargetPosition(500))
+                .addWaitAction(1, motorActions.intakeTransfer())
                 .setWaitCondition(() -> motorControl.getDetectedColor() != Enums.DetectedColor.UNKNOWN);
         tasks.add(pickup1Task);
 
-        PathChainTask score1Task = new PathChainTask(score1, 0.3)
-                .addWaitAction(0, new SequentialAction(
-                        motorActions.lift.waitUntilFinished(),
+        PathChainTask score1Task = new PathChainTask(score1, 0.8)
+                .addWaitAction(() -> motorControl.lift.closeEnough(770), new SequentialAction(
                         motorActions.outTakeLinkage.sample(),
-                        new SleepAction(0.2),
-                        motorActions.outtakeTransfer()
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer(),
+                        motorActions.intakePivot.Grab(),
+                        motorActions.intakeArm.Grab()
                 ))
-
                 .setMaxWaitTime(2)
-                .setWaitCondition(motorControl.lift::closeEnough);
+                .setWaitCondition(() -> motorControl.lift.closeEnough(770));
         tasks.add(score1Task);
 
         PathChainTask pickup2Task = new PathChainTask(intake2, 0.5)
-                .setMaxWaitTime(2)
-                .addWaitAction(1.5, motorActions.intakeTransfer())
+                .setMaxWaitTime(1.25)
+                .addWaitAction(0, () -> motorControl.getDetectedColor() == Enums.DetectedColor.UNKNOWN, motorActions.extendo.setTargetPosition(500))
+                .addWaitAction(1, motorActions.intakeTransfer())
                 .setWaitCondition(() -> motorControl.getDetectedColor() != Enums.DetectedColor.UNKNOWN);
         tasks.add(pickup2Task);
 
-        PathChainTask score2Task = new PathChainTask(score2, 0.3)
-                .addWaitAction(0, new SequentialAction(
-                        motorActions.lift.waitUntilFinished(),
+        PathChainTask score2Task = new PathChainTask(score2, 0.8)
+                .addWaitAction(() -> motorControl.lift.closeEnough(770), new SequentialAction(
                         motorActions.outTakeLinkage.sample(),
-                        new SleepAction(0.2),
-                        motorActions.outtakeTransfer()
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer(),
+                        motorActions.intakePivot.Grab(),
+                        motorActions.intakeArm.Grab()
                 ))
                 .setMaxWaitTime(2)
-                .setWaitCondition(motorControl.lift::closeEnough);
+                .setWaitCondition(() -> motorControl.lift.closeEnough(770));
         tasks.add(score2Task);
 
         PathChainTask pickup3Task = new PathChainTask(intake3, 0.5)
-                .setMaxWaitTime(2)
-                .addWaitAction(1.5, motorActions.intakeTransfer())
+                .setMaxWaitTime(1.25)
+                .addWaitAction(1, motorActions.intakeTransfer())
                 .setWaitCondition(() -> motorControl.getDetectedColor() != Enums.DetectedColor.UNKNOWN);
         tasks.add(pickup3Task);
 
-        PathChainTask score3Task = new PathChainTask(score3, 0.3)
-                .addWaitAction(0, new SequentialAction(
-                        motorActions.lift.waitUntilFinished(),
+        PathChainTask score3Task = new PathChainTask(score3, 1)
+                .addWaitAction(() -> motorControl.lift.closeEnough(770), new SequentialAction(
                         motorActions.outTakeLinkage.sample(),
-                        new SleepAction(0.2),
-                        motorActions.outtakeTransfer()
+                        new SleepAction(0.5),
+                        motorActions.outtakeTransfer(),
+                        motorActions.intakePivot.Grab(),
+                        motorActions.intakeArm.Grab()
                 ))
                 .setMaxWaitTime(2)
-                .setWaitCondition(motorControl.lift::closeEnough);
+                .setWaitCondition(() -> motorControl.lift.closeEnough(770));
         tasks.add(score3Task);
     }
 
@@ -206,7 +217,7 @@ public class BucketAuto extends PathChainAutoOpMode {
 
     @Override
     protected void startPath(PathChainTask task) {
-        follower.followPath((PathChain) task.pathChain, false);
+        follower.followPath((PathChain) task.pathChain, true);
     }
 
     // ---------------------------
@@ -241,7 +252,9 @@ public class BucketAuto extends PathChainAutoOpMode {
         taskPhase = 0;
         pathTimer.resetTimer();
         run(motorActions.intakePivot.Transfer());
+        run(motorActions.outTakeLinkage.Transfer());
         run(motorActions.intakeArm.Intake());
+        run(motorActions.outtakeSampleAuto());
     }
 
     @Override

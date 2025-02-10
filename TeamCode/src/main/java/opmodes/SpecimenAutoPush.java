@@ -25,7 +25,7 @@ import pedroPathing.constants.LConstants;
  * The path is defined using the new segments (from your GeneratedPath class).
  * A single task is created using that path chain, with a wait-action in its waiting phase.
  */
-@Autonomous(name = "Specimen Auto")
+@Autonomous(name = "Specimen Auto Push")
 public class SpecimenAutoPush extends PathChainAutoOpMode {
 
     // -------- Hardware & Helper Fields --------
